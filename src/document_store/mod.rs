@@ -33,9 +33,13 @@ pub fn initialize_document_store(root_dir: String) {
     override_builder.add("**/*.permissions.yml").unwrap();
     override_builder.add("**/*.menu.yml").unwrap();
     override_builder.add("**/src/**/*.php").unwrap();
+    override_builder.add("**/core/modules/**/*.php").unwrap();
     override_builder.add("**/core/lib/**/*.php").unwrap();
     // For now we don't care about interfaces at all.
     override_builder.add("!**/src/**/*Interface.php").unwrap();
+    override_builder
+        .add("!**/core/modules/**/*Interface.php")
+        .unwrap();
     override_builder
         .add("!**/core/lib/**/*Interface.php")
         .unwrap();
