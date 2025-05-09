@@ -48,6 +48,7 @@ pub fn handle_text_document_completion(request: Request) -> Option<Response> {
 
     let mut completion_items: Vec<CompletionItem> = get_global_snippets();
     if let Some(token) = token {
+        log::info!("token: {:?}", token);
         if let TokenData::DrupalRouteReference(_) = token.data {
             let re = Regex::new(r"(?<method>.*fromRoute\(')(?<name>[^']*)'(?<params>, \[.*\])?");
             let mut method_len = 0;
@@ -145,6 +146,59 @@ pub fn handle_text_document_completion(request: Request) -> Option<Response> {
                         }
                     })
                 });
+        } else if let TokenData::PhpMethodDefinition(_) = token.data {
+            let cursor_char_pos = params.text_document_position.position.character as usize;
+
+            if cursor_char_pos >= 2 {
+                let text_before_arrow_full = &current_line[0..cursor_char_pos.saturating_sub(2)];
+                let trimmed_text_before_arrow = text_before_arrow_full.trim_end();
+
+                let service_finder_re = Regex::new(
+                    r"(?m)\\Drupal::service\s*\(\s*['](?P<service_id>[a-zA-Z0-9_.-]+)[']\s*\)",
+                )
+                .unwrap();
+                let mut found_service_id: Option<String> = None;
+
+                log::info!("trimmed before arrow: {:?}", trimmed_text_before_arrow);
+
+                if let Some(captures_on_trimmed) = service_finder_re
+                    .captures_iter(trimmed_text_before_arrow)
+                    .last()
+                {
+                    if let Some(id_match) = captures_on_trimmed.name("service_id") {
+                        found_service_id = Some(id_match.as_str().to_string());
+                    }
+                }
+
+                log::info!("SERVICE! {:?}", found_service_id);
+                let store = DOCUMENT_STORE.lock().unwrap();
+                if let Some((_, service_token)) = store.get_service_definition(&found_service_id?) {
+                    if let TokenData::DrupalServiceDefinition(service) = &service_token.data {
+                        log::info!("found service token: {:?}", service);
+                        log::info!("find class: {:?}", service.class);
+                        if let Some((_, class_token)) = store.get_class_definition(&service.class) {
+                            log::info!("found class_token: {:?}", class_token);
+                            if let TokenData::PhpClassDefinition(class) = &class_token.data {
+                                log::info!("found class definition: {:?}", class);
+                                class.methods.keys().for_each(|method_name| {
+                                    log::info!("method_name: {:?}", method_name);
+                                    completion_items.push(CompletionItem {
+                                        label: method_name.clone(),
+                                        label_details: Some(CompletionItemLabelDetails {
+                                            description: Some("Method".to_string()),
+                                            detail: None,
+                                        }),
+                                        kind: Some(CompletionItemKind::REFERENCE),
+                                        documentation: None,
+                                        deprecated: Some(false),
+                                        ..CompletionItem::default()
+                                    });
+                                });
+                            }
+                        }
+                    }
+                }
+            }
         } else if let TokenData::DrupalServiceReference(_) = token.data {
             DOCUMENT_STORE
                 .lock()
